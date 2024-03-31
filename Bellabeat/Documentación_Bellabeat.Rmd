@@ -1,0 +1,911 @@
+---
+title: "**Documentación Bellabeat (Limpieza, manipulación y visualización de datos)**"
+author: "M. Santander"
+output:
+  html_document:
+    message: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+<h2 style="font-size: 32px; color: #02331e; text-align: center; font-family: Arial, sans-serif; letter-spacing: 2px; text-decoration: none; border: 1px solid black; background-color: #f2f2f2;">
+  <strong>Gráficos con datos de control de peso.</strong>
+</h2>
+
+En esta sección se muestran las limpiezas y manipulaciones de los datos de control de peso. A manera de aclaración, el gráfico **"Modo de registro de datos de control de peso"** se colocó en la pestaña **"Registros"** del dashboard resultante, ya que la agrupación de los resultados de registros facilita su análisis.
+
+## Control peso 1
+
+Se inician los paquetes necesarios para realizar un gráfico de pastel en ggplot, siendo estos: readr, janitor, dplyr, gtsummary y ggplot2.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(gtsummary)
+library(ggplot2)
+```
+
+Se crea un directorio inicial y se almacena en una variable. Esto le confiere una mayor portabilidad al código, ya que cambiando esta ruta se puede indicar el lugar donde se almacena el proyecto para cada usuario. Esta ruta se llamará las veces que sean necesarias con ayuda de la función **"file.path"**.
+
+```{r }
+directorio_inicial <- "D:/Marco Aurelio/Proyectos/GDA/"
+```
+
+Se importan los datos, con ayuda de la función read_csv e indicando la ruta en la que se encuentra el archivo **"weightLogInfo_merged.csv"**, y se guardan en una variable llamada **”control_peso”**.
+
+```{r }
+control_peso <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "weightLogInfo_merged.csv"))
+```
+
+Con ayuda de la función View se observan los datos para comprobar que se cargaron correctamente.
+
+```{r }
+View(control_peso)
+```
+
+Se comprueba que no existen datos duplicados utilizando la función **"duplicated"** y, en este caso, imprimiendo el resultado con la función **”print”**. Se imprime el resultado, contrario a lo escrito en los gráficos separados, para dejar constancia de la inexistencia de datos repetidos en el archivo HTML generado.
+
+```{r }
+control_peso_duplicados <- control_peso[duplicated(control_peso), ] %>% 
+  print()
+```
+
+Se seleccionan las columnas correspondientes al número de identificación del usuario (id), el porcentaje de grasa corporal (Fat) y el índice de masa corporal (BMI), después se le da un formato limpio a cada encabezado de la columna, es decir, cada encabezado de escribe en minúsculas. Todo esto se guarda en una nueva variable, llamada **”control_peso_uno”**.
+
+```{r }
+control_peso_uno <- control_peso %>%
+  select(Id,Fat,BMI) %>%
+  clean_names()
+```
+
+Con ayuda de la función View se observan los datos de **”control_peso_uno”** para comprobar que las modificaciones se aplicaron correctamente y se cargaron a la variable.
+
+```{r }
+View(control_peso_uno)
+```
+
+Se genera una columna llamada **"dos_mediciones"** que indica si los usuarios miden ambos parámetros (porcentaje de grasa corporal e índice de masa corporal) o no.
+
+```{r }
+control_peso_uno <- control_peso_uno %>%
+  mutate(dos_mediciones = ifelse(!is.na(fat) & !is.na(bmi), "IMC y porcentaje graso", "Solo IMC"))
+```
+
+Se exportan los datos transformados de la variable **”control_peso_uno”**, para ello se escribe la función write_csv utilizando como argumentos el nombre de la variable y la ubicación en donde se requiere almacenar.
+
+```{r }
+write_csv(control_peso_uno, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "control_peso_uno.csv"))
+```
+
+Se resumen los datos de la columna **”dos_mediciones”** para que se compute la proporción de usuarios que utilizan una o dos mediciones, y por tanto sean utilizables en un gráfico de pastel. Este resumen se guarda en la variable **”resumen_control_uno”**.
+
+```{r }
+resumen_control_uno <- control_peso_uno %>%
+  tabyl(dos_mediciones)
+```
+
+Se observa **”resumen_control_uno”** para asegurar que la tabla resultante sea funcional para el gráfico de pastel.
+
+```{r }
+View(resumen_control_uno)
+```
+
+Se crea el gráfico de pastel a partir del resumen, es este caso con ggplot, lo cual solo generará una imagen. Se colocan los datos de **”resumen_control_uno”**, utilizando el conteo de individuos y la cantidad de mediciones para establecer las porciones del gráfico.
+
+```{r }
+ggplot(resumen_control_uno, aes(x = "", y = n, fill = dos_mediciones)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#4a8a76", "#2d3f7a")) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(round(percent*100, 2), "%")), color = "white", position = position_stack(vjust = 0.5)) +
+  labs(title = "Cantidad de registros de IMC y porcentaje graso", x = " ", y = " ", fill = "Medición utilizada") +
+  theme_minimal()+
+  theme(plot.title = element_text(family = "Arial", size = 10, face = "bold"), text = element_text(family = "Arial", size = 10, color = "black"), legend.margin = margin(-5, 0, 3, 0), axis.text.x = element_blank(), legend.position = "bottom") +
+  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5))
+```
+
+## Control peso 2
+
+Se inician los paquetes necesarios para realizar un gráfico de pastel en ggplot, siendo estos: readr, janitor, dplyr, gtsummary y plotly. 
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(gtsummary)
+library(plotly)
+```
+
+Se importan los datos, con ayuda de la función read_csv e indicando la ruta en la que se encuentra el archivo **"weightLogInfo_merged.csv"**, al igual que en el caso anterior se guardan en una variable llamada **”control_peso”**.
+
+```{r }
+control_peso <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "weightLogInfo_merged.csv"))
+```
+
+En esta ocasión también se observan los datos para comprobar que se cargaron correctamente.
+
+```{r }
+View(control_peso)
+```
+
+Se prueba que no existen filas de datos duplicadas de forma idéntica al caso anterior, ya que es el mismo conjunto de datos.
+
+```{r }
+control_peso_duplicados <- control_peso[duplicated(control_peso), ] %>% 
+  print()
+```
+
+Se seleccionan las columnas correspondientes al número de identificación del usuario (id) y la manera en que se ingresaron los datos (IsManualReport), se le da un formato limpio a cada encabezado de columna. Estos datos se guardan en la variable **”control_peso_dos”**.
+
+```{r }
+control_peso_dos <- control_peso %>%
+  select(Id,IsManualReport) %>%
+  clean_names()
+```
+
+Nuevamente se aplica la función View se observan los datos de **”control_peso_uno”** para comprobar que las modificaciones se aplicaron correctamente y se cargaron a la variable.
+
+```{r }
+View(control_peso_dos)
+```
+
+Se añade una columna para saber en modo en que los usuarios ingresan sus datos (Manual o Automático).
+
+```{r }
+control_peso_dos <- control_peso_dos %>%
+  mutate(entrada_datos = ifelse(is_manual_report == "TRUE", "Manual", "Automática"))
+```
+
+Se exportan los datos transformados de la variable **”control_peso_dos”** de la misma forma que en el caso anterior.
+
+```{r }
+write_csv(control_peso_dos, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "control_peso_dos.csv"))
+```
+
+Se resumen los datos de la columna **”entrada_datos”** para que se compute la proporción de como los usuarios que registran sus datos, y por tanto sean utilizables en un gráfico de pastel. Este resumen se guarda en la variable **”resumen_control_dos”**.
+
+```{r }
+resumen_control_dos <- control_peso_dos %>%
+  tabyl(entrada_datos)
+```
+
+Se observa **”resumen_control_dos”** para asegurar que el resultado sea funcional para el gráfico de pastel.
+
+```{r }
+View(resumen_control_dos)
+```
+
+Se crea el gráfico de pastel a partir de **”resumen_control_dos”** en librería plotly, lo cual creará un gráfico interactivo contrario a lo que sucedió con ggplot. Se utilizan las dos etiquetas posibles (Manual o Automática) y el porcentaje de cada modo de entrada de datos y para establecer las porciones del gráfico.
+
+```{r }
+plot_ly(labels = ~resumen_control_dos$entrada_datos,
+        values = ~resumen_control_dos$percent, type = 'pie',
+        marker = list(colors = c("#d1a624", "#2d3f7a")) 
+        )%>%
+  layout(title = "Modo de registro de datos de control de peso", titlefont = list(family = "Arial Black", size = 18), scene = list(aspectmode = "data"))
+```
+
+<h2 style="font-size: 32px; color: #162a4a; text-align: center; font-family: Arial, sans-serif; letter-spacing: 2px; text-decoration: none; border: 1px solid black; background-color: #f2f2f2;">
+  <strong>Gráficos con datos de actividad diaria.</strong>
+</h2>
+
+En este apartado se muestra la explicación del código para la limpieza de datos y creación de gráficos a partir del archivo **“dailyActivity_merged.csv”**.
+
+## Diario Actividad 1
+
+Se inician los paquetes readr, janitor, dplyr y plotly, necesarios para realizar un gráfico interactivo de barras apiladas.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(plotly)
+```
+
+Se importan los datos **“dailyActivity_merged.csv”** con ayuda de la función read_csv, se guardan en la variable **”diario_actividad”**.
+
+```{r }
+diario_actividad <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "dailyActivity_merged.csv"))
+```
+
+Se observan los datos para comprobar que se cargaron correctamente.
+
+```{r }
+View(diario_actividad)
+```
+
+Se utilizan las funciones **"duplicated"** y **”print”** para corroborar que no existen datos duplicados, y el resultado se muestre en el archivo HTML resultante.
+
+```{r }
+diario_actividad_duplicados <- diario_actividad[duplicated(diario_actividad), ] %>% 
+  print()
+```
+
+Se seleccionan las columnas concernientes al número de identificación de usuario (Id) y al tiempo de cada tipo de actividad (VeryActiveMinutes, FairlyActiveMinutes, LightlyActiveMinutes y SedentaryMinutes). Se les da un formato limpio a sus encabezados.
+
+```{r }
+diario_actividad_uno <- diario_actividad %>%
+  select(Id,VeryActiveMinutes,FairlyActiveMinutes,LightlyActiveMinutes,SedentaryMinutes) %>%
+  clean_names()
+```
+
+Se agrupan los datos por id y con ayuda de la función **”summarise”** se generan nuevas columnas en donde se suman los tiempos de cada tipo de actividad.
+
+```{r }
+diario_actividad_uno <- diario_actividad_uno %>%
+  group_by(id) %>%
+  summarise(minutos_muy_activos_suma = sum(very_active_minutes),
+            minutos_activos_suma = sum(fairly_active_minutes),
+            minutos_ligeramente_activos_suma = sum(lightly_active_minutes),
+            minutos_sedentarios_suma = sum(sedentary_minutes)
+            )
+```
+
+Se observa el tipo de dato de cada columna para asegurarnos que tipo de dato es id, en el caso de este gráfico se requiere que los id sean etiquetas de texto.
+
+```{r }
+str(diario_actividad_uno)
+```
+
+Como el tipo de dato resultó ser numérico para la columna **”id”** se añade una columna nueva llamada **“id_cliente”** en la que se transforman a texto los datos numéricos, después se selecciona todo el marco de datos menos la columna **”id”**.
+
+```{r }
+diario_actividad_uno <- diario_actividad_uno %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+```
+
+Se observan los datos para asegurar que todos los cambios se llevaron a cabo de manera correcta.
+
+```{r }
+View(diario_actividad_uno)
+```
+
+Se exportan los datos modificados de la variable **”diario_actividad_uno”** con ayuda de la función **"write_csv"**.
+
+```{r }
+write_csv(diario_actividad_uno, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "diario_actividad_uno.csv"))
+```
+
+Se crea el gráfico de barras utilizando los datos de **” diario_actividad_uno”**, se coloca la id del cliente en el eje de las abscisas y los minutos de mucha actividad para el eje de las ordenadas, después se establece el tipo de gráfico con el argumento **“bar”**. Lo anterior crea la primer barra, para añadir el resto se utiliza la función **”add_trace”**.
+
+```{r }
+plot_ly(diario_actividad_uno, x = ~diario_actividad_uno$id_cliente, y = ~diario_actividad_uno$minutos_muy_activos_suma, type = 'bar', name = 'Muy activa', marker = list(color = 'green')) %>%
+  add_trace(y = ~diario_actividad_uno$minutos_activos_suma, name = 'Activa', marker = list(color = 'yellow')) %>%
+  add_trace(y = ~diario_actividad_uno$minutos_ligeramente_activos_suma, name = 'Ligeramente \nactiva', marker = list(color = 'orange')) %>%
+  add_trace(y = ~diario_actividad_uno$minutos_sedentarios_suma, name = 'Sedentaria', marker = list(color = 'red')) %>%
+  layout(title = "Tiempo de actividad física", titlefont = list(family = "Arial Black", size = 12.5), barmode = 'stack', xaxis = list(title = 'ID'), yaxis = list(title = 'Tiempo (min)', tickformat = ".0f"))
+```
+
+## Diario Actividad 2
+
+Se inician los paquetes readr, janitor, dplyr, scales y ggplot2.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(scales)
+library(ggplot2)
+```
+
+Se importan los datos **“dailyActivity_merged.csv”** y se guardan en la variable **”diario_actividad”**.
+
+```{r }
+diario_actividad <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "dailyActivity_merged.csv"))
+```
+
+Con ayuda de la función **"View"** se observan los datos para comprobar que se cargaron correctamente.
+
+```{r }
+View(diario_actividad)
+```
+
+Se observa que no existen datos duplicados al igual que en el caso anterior.
+
+```{r }
+diario_actividad_duplicados <- diario_actividad[duplicated(diario_actividad), ] %>% 
+  print()
+```
+
+Se seleccionan las tres columnas necesarias para crear el mapa de calor, como son: el número de identificación de usuario (Id), la fecha de actividad (ActivityDate) y la cantidad de pasos (TotalSteps). A continuación, se les da un formato limpio a sus encabezados.
+
+```{r }
+diario_actividad_dos <- diario_actividad %>%
+  select(Id,ActivityDate,TotalSteps) %>%
+  clean_names()
+```
+
+Se observa el tipo de dato de cada columna para asegurarnos que cada tipo es utilizable para el mapa de calor.
+
+```{r }
+str(diario_actividad_dos)
+```
+
+Como el tipo de dato resultó para la columna **”id”**  resulta ser numérico, se transforma a texto en una columna nueva llamada **“id_cliente”**.
+
+```{r }
+diario_actividad_dos <- diario_actividad_dos %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+```
+
+Como el tipo de dato resultó para la columna **”activity_date”**  es texto, lo más adecuado es transformarla al tipo fecha, para ello se crea la columna **“fecha”**.
+
+```{r }
+diario_actividad_dos <- diario_actividad_dos %>%
+  mutate(fecha = as.Date(activity_date, format = "%m/%d/%Y")) %>%
+  select(-activity_date)
+```
+
+Se observan los datos modificados.
+
+```{r }
+View(diario_actividad_dos)
+```
+
+Los datos de la variable **”diario_actividad_dos”** se exportan con ayuda de la función **"write_csv"**.
+
+```{r }
+write_csv(diario_actividad_dos, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "diario_actividad_dos.csv"))
+```
+
+Se crea el mapa de calor utilizando los datos de **”diario_actividad_dos”**, se coloca la fecha en el eje de las abscisas y el id del cliente en el eje de las ordenadas, con el argumento **“fill”** se añade la cantidad de pasos diarios. Con la función **”scale_fill_gradientn”** se personaliza la escala de color, mientras que con **”scale_x_date”** se muestran las etiquetas del eje de las abscisas por semana para ser más legibles. El resultado es una imagen, no un gráfico interactivo.
+
+```{r }
+ggplot(diario_actividad_dos, aes(x = fecha, y = id_cliente, fill = total_steps)) +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("#c72c31", "#e3cb2d", "#2c8f30", "#1d702c", "#1b633e", "#13543a", "#081933"), values = rescale(c(0, 30000))) +
+  theme_minimal() +
+  labs(title = "Cantidad de pasos dados por día", x = "Fecha", y = "ID", fill = "Cantidad de pasos") +
+  scale_x_date(date_breaks = "1 week", date_labels = "%d-%m") +
+   theme(plot.title = element_text(family = "Arial", size = 10, face = "bold"))
+```
+
+## Diario Actividad 3
+
+Se inician los paquetes readr, janitor, dplyr y plotly.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(plotly)
+```
+
+Se importan los datos **“dailyActivity_merged.csv”** con ayuda de la función read_csv, se guardan en la variable **”diario_actividad”**.
+
+```{r }
+diario_actividad <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "dailyActivity_merged.csv"))
+```
+
+Se observan los datos de actividad diara para comprobar que se cargaron correctamente.
+
+```{r }
+View(diario_actividad)
+```
+
+Al igual que en los dos casos anteriores, tratándose de los mismos datos,se observa que no existen datos duplicados.
+
+```{r }
+diario_actividad_duplicados <- diario_actividad[duplicated(diario_actividad), ] %>% 
+  print()
+```
+
+Se seleccionan las columnas concernientes al número de identificación de usuario (Id) y a la cantidad de calorías utilizadas (Calories). Se les da un formato limpio a sus encabezados.
+
+```{r }
+diario_actividad_tres <- diario_actividad %>%
+  select(Id,Calories) %>%
+  clean_names()
+```
+
+Se eliminan los valores de cero, indican que no hubo registros de calorias consumidas. Se ha decidido no eliminar valores por debajo de cierto nivel, siempre que sea mayor a cero, dado que hacerlo sería arbitrario (no se tienen elementos suficientes para calcular el gasto basal de cada usuario) y podría introducir un sesgo a los datos.
+
+```{r }
+diario_actividad_tres <- diario_actividad_tres %>%
+  filter(calories != 0)
+```
+
+Se observa el tipo de dato de cada columna para asegurarnos que tipo de dato es id, en el caso de este gráfico se requiere que los id sean etiquetas de texto.
+
+```{r }
+str(diario_actividad_tres)
+```
+
+Para pasar del tipo de dato numérico en la columna **”id”** a un tipo de dato en formato de texto se añade una columna llamada **“id_cliente”** en la que se transforman a texto los datos numéricos, después se seleccionan todas las columnas excepto la nombrada **”id”**.
+
+```{r }
+diario_actividad_tres <- diario_actividad_tres %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+```
+
+Se observan los datos de la variable **”diario_actividad_tres”** para asegurar la aplicación de los cambios realizados.
+
+```{r }
+View(diario_actividad_tres)
+```
+
+Se exportan los datos de la variable **”diario_actividad_tres”**.
+
+```{r }
+write_csv(diario_actividad_tres, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "diario_actividad_tres.csv"))
+```
+
+Se crean los diagramas de caja y bigote utilizando los datos de **”diario_actividad_tres”**, se coloca la id del cliente a modo de etiqueta para cada diagrama y las calorías utilizadas en el eje de las ordenadas, después se establece el tipo de gráfico con el argumento **”type”** y con el argumento **”color”** se pide que se coloreen por número de identificación de cliente. Al ser realizado con plotly, se obtiene un gráfico interactivo.
+
+```{r }
+plot_ly(diario_actividad_tres, x = ~diario_actividad_tres$id_cliente, y = ~diario_actividad_tres$calories, type = 'box', color = ~diario_actividad_tres$id_cliente) %>%
+  layout(title = "Diagrama de caja y bigote de gasto calórico por ID", titlefont = list(family = "Arial Black", size = 12.5), xaxis = list(title = "ID", tickangle = -90), yaxis = list(title = "Gasto calórico (kcal)"))
+```
+
+<h2 style="font-size: 32px; color: #2f164a; text-align: center; font-family: Arial, sans-serif; letter-spacing: 2px; text-decoration: none; border: 1px solid black; background-color: #f2f2f2;">
+  <strong>Gráficos con datos de sueño.</strong>
+</h2>
+
+En esta sección se muestra la documentación del código para limpieza y creación de gráficos a partir de los datos del archivo **“sleepDay_merged.csv”**.
+
+## Diario sueño 1
+
+Se inician los paquetes necesarios para realizar un gráfico interactivo de barras agrupadas, los cuales son: readr, janitor, dplyr y plotly.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(plotly)
+```
+
+Se importan los datos del archivo **“sleepDay_merged.csv”** con ayuda de la función read_csv, y se guardan en la variable **”diario_sueño”**.
+
+```{r }
+diario_sueño <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "sleepDay_merged.csv"))
+```
+
+Se observan los datos para comprobar que se cargaron correctamente.
+
+```{r }
+View(diario_sueño)
+```
+
+Se prueba si existen datos duplicados con ayuda de las funciones **”duplicated”** y **“print”**.
+
+```{r }
+diario_sueño_duplicados <- diario_sueño[duplicated(diario_sueño), ] %>% 
+  print()
+```
+
+Como se observó en el paso anterior, en este caso existen datos duplicados, por tanto, se seleccionan los datos únicos mediante la negación de los resultados para la función **”duplicated”** y se almacenan en la variable **"diario_sueño_singulares"**. Después, se reemplazan los datos de la variable **"diario_sueño"** por los datos sin duplicados.
+
+```{r }
+diario_sueño_singulares <- diario_sueño[!duplicated(diario_sueño), ]
+diario_sueño <- diario_sueño_singulares
+```
+
+Se seleccionan las columnas concernientes al número de identificación de usuario (Id), al tiempo total de sueño (TotalMinutesAsleep) y al tiempo total en cama (TotalTimeInBed). A continuación, se les da un formato limpio a sus encabezados.
+
+```{r }
+diario_sueño_uno <- diario_sueño %>%
+  select(Id,TotalMinutesAsleep,TotalTimeInBed) %>%
+  clean_names()
+```
+
+Se agrupan los datos por id y con ayuda de la función **”summarise”** se generan nuevas columnas en donde se suman los tiempos de sueño y en cama.
+
+```{r }
+diario_sueño_uno <- diario_sueño_uno %>%
+  group_by(id) %>%
+  summarise(tiempo_sueño_suma = sum(total_minutes_asleep), tiempo_cama_suma = sum(total_time_in_bed))
+```
+
+Se observa el tipo de dato de cada columna para asegurarnos el tipo de dato que corresponde a la columna id, en el caso de este gráfico se requiere que los id sean etiquetas de texto.
+
+```{r }
+str(diario_sueño_uno)
+```
+
+Como el tipo de dato para la columna **”id”** resultó ser numérico, se añade una columna nueva llamada **“id_cliente”** en la que se transforman a texto los datos numéricos, después se selecciona todo el marco de datos menos la columna **”id”**.
+
+```{r }
+diario_sueño_uno <- diario_sueño_uno %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+```
+
+Se observan los datos para asegurar que todos los cambios se aplicaron.
+
+```{r }
+View(diario_sueño_uno)
+```
+
+Se exportan los datos modificados de la variable **”diario_sueño_uno”**.
+
+```{r }
+write_csv(diario_sueño_uno, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "diario_sueño_uno.csv"))
+```
+
+Se crea el gráfico de barras agrupadas utilizando los datos de **”diario_sueño_uno”**, se coloca la id del cliente en el eje de las abscisas y los minutos de sueño en el eje de las ordenadas, después se establece el tipo de gráfico con el argumento **“bar”**. Lo anterior crea la primer barra, para añadir la barra de tiempo en cama se utiliza la función **” add_trace”**.
+
+```{r }
+plot_ly(diario_sueño_uno, x = ~diario_sueño_uno$id_cliente, y = ~diario_sueño_uno$tiempo_sueño_suma, type = 'bar', name = 'Tiempo \nde sueño', marker = list(color = "#d1a624")) %>%
+  add_trace(y = ~diario_sueño_uno$tiempo_cama_suma, name = 'Tiempo \nen cama', marker = list(color = "#384982")) %>%
+  layout(title = "Total de minutos dormidos y en cama", titlefont = list(family = "Arial Black", size = 12.5), xaxis = list(autotypenumbers = 'strict', title = "ID", tickangle = 60, tickformat = ".0f"), yaxis = list(title = "Tiempo (min)", tickformat = ".0f"), barmode = 'group')
+```
+
+## Diario sueño 2
+
+Se inician los paquetes readr, janitor, dplyr, gtsummary y plotly.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(gtsummary)
+library(plotly)
+```
+
+Se importan los datos **“sleepDay_merged.csv”** con ayuda de la función read_csv, se guardan en una variable.
+
+```{r }
+diario_sueño <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "sleepDay_merged.csv"))
+```
+
+Se observan los datos para comprobar que se cargaron correctamente.
+
+```{r }
+View(diario_sueño)
+```
+
+Se observan los datos duplicados existentes con las funciones **”duplicated”** y **“print”**.
+
+```{r }
+diario_sueño_duplicados <- diario_sueño[duplicated(diario_sueño), ] %>% 
+  print()
+```
+
+Como en el caso anterior, se seleccionan los datos singulares y se almacenan en una variable. Después, se reemplazan los datos de la variable **"diario_sueño"** por los datos guardados en **"diario_sueño_singulares"**.
+
+```{r }
+diario_sueño_singulares <- diario_sueño[!duplicated(diario_sueño), ]
+diario_sueño <- diario_sueño_singulares
+```
+
+Se seleccionan las columnas concernientes al número de identificación de usuario (Id) y a la cantidad de registros diarios de sueño (TotalSleepRecords). Se les da un formato limpio a sus encabezados.
+
+```{r }
+diario_sueño_dos <- diario_sueño %>%
+  select(Id,TotalSleepRecords) %>%
+  clean_names()
+```
+
+Se genera una columna llamada **"sueño_continuo"**, la cual indica si los usuarios duermen de manera continua, para ello se utiliza la función **“ifelse”** tomando en consideración la cantidad de registros de sueño (si hay un solo registro es **“Continuo”**, de lo contrario es **“Interrumpido”**).
+
+```{r }
+diario_sueño_dos <- diario_sueño_dos %>%
+  mutate(sueño_continuo = ifelse(total_sleep_records == "1", "Continuo", "Interrumpido"))
+```
+
+Se observan los datos con las modificaciones realizadas hasta el momento.
+
+```{r }
+View(diario_sueño_dos)
+```
+
+Se exportan los datos de la variable **"diario_sueño_dos"** a **"diario_sueño_dos.csv"**.
+
+```{r }
+write_csv(diario_sueño_dos, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "diario_sueño_dos.csv"))
+```
+
+Se resumen los datos de la columna **”sueño_continuo”** para que se compute la proporción de usuarios que duermen de manera continua y los que no, y por tanto sean utilizables en un gráfico de pastel. Este resumen se guarda en la variable **”resumen_sueño_dos”**.
+
+```{r }
+resumen_sueño_dos <- diario_sueño_dos %>%
+  tabyl(sueño_continuo)
+```
+
+Se comprueba que el resumen se generó de manera correcta.
+
+```{r }
+View(resumen_sueño_dos)
+```
+
+Se crea el gráfico de pastel a partir de los datos en la variable **”resumen_sueño_dos”**. Se utilizan las etiquetas posibles **Si** o **No** para denotar si se tiene sueño continuo.  y valor de porcentaje de cada una para establecer las porciones del gráfico. Al utilizar la librería plotly, se obtiene un gráfico interactivo.
+
+```{r }
+plot_ly(labels = ~resumen_sueño_dos$sueño_continuo,
+        values = ~resumen_sueño_dos$percent, type = 'pie',
+        marker = list(colors = c("#2d3f7a", "#4a8a76"))
+        ) %>%
+  layout(title = "Registros de sueño", titlefont = list(family = "Arial Black", size = 12.5), scene = list(aspectmode = "data"))
+```
+
+<h2 style="font-size: 32px; color: #66120a; text-align: center; font-family: Arial, sans-serif; letter-spacing: 2px; text-decoration: none; border: 1px solid black; background-color: #f2f2f2;">
+  <strong>Gráficos con datos de frecuencia cardiaca.</strong>
+</h2>
+
+En esta sección se muestra el código, junto a su explicación, para ejecutar la limpieza y creación de gráficos con los datos del archivo **“heartrate_seconds_merged.csv”**.
+
+## Frecuencia Cardiaca
+
+Se inician los paquetes necesarios para crear un mapa de calor interactivo, los cuales son: readr, janitor, dplyr y plotly.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(plotly)
+```
+
+Se importan los datos **“heartrate_seconds_merged.csv”** utilizando la función read_csv, y se guardan en la variable **”frecuencia_cardiaca”**.
+
+```{r }
+frecuencia_cardiaca <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "heartrate_seconds_merged.csv"))
+```
+
+Se corrobora que los datos se cargaron correctamente.
+
+```{r }
+View(frecuencia_cardiaca)
+```
+
+Al igual que con los tres conjuntos de datos anteriores, se comprueba si existen datos duplicados con las funciones **”duplicated”** y **”print”**
+
+```{r }
+frecuencia_cardiaca_duplicados <- frecuencia_cardiaca[duplicated(frecuencia_cardiaca), ] %>% 
+  print()
+```
+
+Se obtiene el tipo de dato de cada columna.
+
+```{r }
+str(frecuencia_cardiaca)
+```
+
+Como el tipo de dato para la columna **”Time”** resultó ser texto, se añade una columna nueva llamada **“fecha”** en la que se transforman a formato de fecha todos los datos, después se selecciona todo el marco de datos menos la columna **”Time”**. Esto es especialmente necesario para los pasos subsecuentes. 
+
+```{r }
+frecuencia_cardiaca_uno <- frecuencia_cardiaca %>%
+  mutate(fecha = as.Date(Time, format = "%m/%d/%Y")) %>%
+  select(-Time)
+```
+
+Se agrupan los datos por Id y fecha, mientras que la frecuencia cardíaca se promedia para obtener la columna **"frecuencia_cardiaca_ diaria_promedio"**. El resultado se guarda en la variable **”frecuencia_promedio”**.
+
+```{r }
+frecuencia_promedio <- frecuencia_cardiaca_uno %>%
+  group_by(Id, fecha) %>%
+  summarize(frecuencia_cardiaca_promedio = mean(Value))
+```
+
+En este punto, se tiene el tipo de dato para la columna **”Id”** como numérico, pero se necesita formato de texto, por lo cual se añade una columna nueva llamada **“id_cliente”** en la que se transforman a texto los datos numéricos.
+
+```{r }
+frecuencia_promedio <- frecuencia_promedio %>%
+  mutate(id_cliente = as.character(Id))
+```
+
+Se observan los datos modificados para constatar la efectividad de los cambios.
+
+```{r }
+View(frecuencia_promedio)
+```
+
+Se exportan los datos modificados de la variable **”frecuencia_promedio”** al archivo **"frecuencia_promedio.csv"**.
+
+```{r }
+write_csv(frecuencia_promedio, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "frecuencia_promedio.csv"))
+```
+
+Se crea el mapa de calor utilizando los datos de **” frecuencia_promedio”**, se coloca la fecha en el eje de las abscisas y el id del cliente en el eje de las ordenadas, como tercera variable se utiliza **“frecuencia_cardiaca_promedio”**, lo cual añade la cantidad latidos promedio como una escala de color, en este caso **"viridis"**.
+
+```{r }
+plot_ly(frecuencia_promedio, x = ~fecha, y = ~id_cliente, z = ~frecuencia_cardiaca_promedio, type = "heatmap", colors = "viridis", colorbar = list(title = "Pulsaciones \npromedio", X = 120, len = 0.7)) %>% 
+  layout(title = "Registros diarios de frecuencia cardíaca promedio", titlefont = list(family = "Arial Black", size = 12.5), xaxis = list(title = "Fecha"), xaxis = list(title = "Fecha"), yaxis = list(title = "ID"))
+```
+
+<h2 style="font-size: 32px; color: #0a5466; text-align: center; font-family: Arial, sans-serif; letter-spacing: 2px; text-decoration: none; border: 1px solid black; background-color: #f2f2f2;">
+  <strong>Registros semanales promedio.</strong>
+</h2>
+
+En esta última sección se muestra la creación del gráfico **“Días de uso por semana”** para la pestaña **“Registros”**, y de los datos de las variables: **”registros_peso”**, **”registros_actividad”**, **”registros_sueño”** y **”registros_frecuencia”** para la pestaña **”Uso semanal”**.
+
+## Registro de datos
+
+Se inician los paquetes readr, janitor, dplyr, lubridate, gtsummary y plotly.
+
+```{r }
+library(readr)
+library(janitor)
+library(dplyr)
+library(lubridate)
+library(gtsummary)
+library(plotly)
+```
+
+Se importan los datos de los cuatro archivos anteriores: **”weightLogInfo_merged.csv”**, **”dailyActivity_merged.csv”**, **”sleepDay_merged.csv”** y **”heartrate_seconds_merged.csv”**. Cada uno se guarda en una variable.
+
+```{r }
+control_peso <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "weightLogInfo_merged.csv"))
+diario_actividad <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "dailyActivity_merged.csv"))
+diario_sueño <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "sleepDay_merged.csv"))
+frecuencia_cardiaca <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "heartrate_seconds_merged.csv"))
+```
+
+Se observan los datos cargados en las cuatro variables para comprobar que se cargaron correctamente.
+
+```{r }
+View(control_peso)
+View(diario_actividad)
+View(diario_sueño)
+View(frecuencia_cardiaca)
+```
+
+Dado que anteriormente se ha comprobado que el único conjunto de datos con filas duplicadas es perteneciente al archivo**“sleepDay_merged.csv”**, se corrige directamente reasignando los datos singulares a la variable **“diario_sueños”**.
+
+```{r }
+diario_sueño_singulares <- diario_sueño[!duplicated(diario_sueño), ]
+diario_sueño <- diario_sueño_singulares
+```
+
+Para cada una de las cuatro variables, se seleccionan las columnas correspondientes a los números de identificación de los usuarios y a las fechas de los registros. Se les da un formato limpio a los encabezados en todos los casos.
+
+```{r }
+fechas_peso <- control_peso %>% 
+  select(Id, Date) %>% 
+  clean_names()
+
+fechas_actividad <- diario_actividad %>% 
+  select(Id, ActivityDate) %>% 
+  clean_names()
+
+fechas_sueño <- diario_sueño %>% 
+  select(Id, SleepDay) %>% 
+  clean_names()
+
+fechas_frecuencia <-  frecuencia_cardiaca %>% 
+  select(Id, Time) %>% 
+  clean_names()
+```
+
+Para cada uno de los cuatro conjuntos de datos, se convierte cada columna de fecha a un formato **"%m/%d/%Y"**. A continuación, se agrupan los registros por id de usuario, el número de semana en que se realizaron y el nombre del día correspondiente. Después, se seleccionan solo los datos distintos para asegurar que se toma en cuenta el día de la semana solo una vez. Se finaliza agrupando los datos por **“id”** y **“semana”** mientras se cuentan el número de registros distintos en cada grupo y se almacenan en la columna **”registros_semanales”**. Todos estos cambios se almacenas en nuevas variables.
+
+```{r }
+registros_peso_semana <- fechas_peso %>%
+  mutate(fecha = as.Date(date, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+
+registros_actividad_semana <- fechas_actividad %>%
+  mutate(fecha = as.Date(activity_date, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+
+registros_sueño_semana <- fechas_sueño %>%
+  mutate(fecha = as.Date(sleep_day, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+
+registros_frecuencia_semana <- fechas_frecuencia %>%
+  mutate(fecha = as.Date(time, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+```
+
+Para cada una de las nuevas variables se exportan los datos modificados con ayuda de la función **"write_csv"** y se guardan en un archivo separado.
+
+```{r }
+write_csv(registros_peso_semana, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "registros_peso_semana.csv"))
+write_csv(registros_actividad_semana, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "registros_actividad_semana.csv"))
+write_csv(registros_sueño_semana, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "registros_sueño_semana.csv"))
+write_csv(registros_frecuencia_semana, file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Limpios", "registros_frecuencia_semana.csv"))
+```
+
+En los cuatro casos, se promedian los registros semanales agrupándolos por id con ayuda de la función **”aggregate”**.
+
+```{r }
+registros_peso <- aggregate(registros_semanales ~ id, data = registros_peso_semana, FUN = mean)
+registros_actividad <- aggregate(registros_semanales ~ id, data = registros_actividad_semana, FUN = mean)
+registros_sueño <- aggregate(registros_semanales ~ id, data = registros_sueño_semana, FUN = mean)
+registros_frecuencia <- aggregate(registros_semanales ~ id, data = registros_frecuencia_semana, FUN = mean)
+```
+
+Para cada conjunto se crean intervalos de clase y se añade una columna con la clasificación. Por ello, se establecen los cortes en una variable de la forma **”cortes_conjunto”** y las etiquetas de clasificación de manera **”etiquetas_conjunto”**. Después se añade la columna **”clase”**, y con ayuda de la función cut se le asigna la etiqueta correspondiente.
+
+```{r }
+cortes_peso <- c(1.0, 2.8, 4.5, 6.3)
+etiquetas_peso <- c("1.0 a 2.8", "2.8 a 4.5", "4.5 a 6.3")
+registros_peso$clase <- cut(registros_peso$registros_semanales,cortes_peso, labels = etiquetas_peso, right = FALSE)
+
+cortes_actividad <- c(4.0, 4.5, 4.9, 5.4, 5.9, 6.3, 6.8)
+etiquetas_actividad <- c("4.0 a 4.5", "4.5 a 4.9", "4.9 a 5.4", "5.4 a 5.9", "5.9 a 6.3", "6.3 a 6.8")
+registros_actividad$clase <- cut(registros_actividad$registros_semanales,cortes_actividad, labels = etiquetas_actividad, right = FALSE)
+
+cortes_sueño <- c(1.0, 2.1, 3.1, 4.2, 5.2, 6.3)
+etiquetas_sueño <- c("1.0 a 2.1", "2.1 a 3.1", "3.1 a 4.2", "4.2 a 5.2", "5.2 a 6.3")
+registros_sueño$clase <- cut(registros_sueño$registros_semanales,cortes_sueño, labels = etiquetas_sueño, right = FALSE)
+
+cortes_frecuencia <- c(1.0, 2.4, 3.8, 5.2, 6.6)
+etiquetas_frecuencia <- c("1.0 a 2.4", "2.4 a 3.8", "3.8 a 5.2", "5.2 a 6.6")
+registros_frecuencia$clase <- cut(registros_frecuencia$registros_semanales,cortes_frecuencia, labels = etiquetas_frecuencia, right = FALSE)
+```
+
+En todos los casos se crea una tabla de frecuencias, para ello se utiliza la función **“table”** sobre la columna **”clase”** para que cuente la repetición de cada etiqueta, en el proceso se genera una tabla con dos columnas. Después se reemplazan los encabezados de las columnas por **"nivel"** y **"frecuencia"** respectivamente.
+
+```{r }
+registro_peso <- as.data.frame(table(registros_peso$clase))
+colnames(registro_peso) <- c("nivel", "frecuencia")
+
+registro_actividad <- as.data.frame(table(registros_actividad$clase))
+colnames(registro_actividad) <- c("nivel", "frecuencia")
+
+registro_sueño <- as.data.frame(table(registros_sueño$clase))
+colnames(registro_sueño) <- c("nivel", "frecuencia")
+
+registro_cardiaco <- as.data.frame(table(registros_frecuencia$clase))
+colnames(registro_cardiaco) <- c("nivel", "frecuencia")
+```
+
+Se corrobora que las tablas de frecuencias se generaron de manera correcta utilizando la función **”View”**.
+
+```{r }
+View(registro_peso)
+View(registro_actividad)
+View(registro_sueño)
+View(registro_cardiaco)
+```
+
+Se crean los gráficos de barras entre los que se alternará, para ello, separados por funciones **”add_trace”**: se añaden los conjuntos de datos, se colocan los niveles en el eje de las abscisas y la frecuencia en el eje de las ordenadas, se establece el tipo de gráfico dando el valor **“bar”** al argumento **“ type”**, finalmente se establece la visibilidad con el argumento **”visible”**.
+
+Además de añadir títulos genéricos para los ejes y el título, se añade un menú desplegable para cambiar entre gráficos, esto se logra utilizando la función **”updatemenus”** y asignando valores a los argumentos **”direction”** y **”showactive”** que permitieran a la lista desplegarse hacia abajo y mostrar el conjunto de datos seleccionado.
+
+Para colocar los valores del menú desplegable simplemente se utiliza la función **”buttons”** y se crea una lista, en cada caso se utiliza el método "restyle" para indicar que se actualizará el grafico mostrado; mientras que con el argumento **”args”** se establece que gráfico va a mantenerse visible, para ello se utiliza una lista en la que se toma en cuenta el orden de adición de cada grafico al código, todos los valores son **”FALSE”** a excepción del correspondiente al gráfico mostrado que será **”TRUE”**.
+
+
+```{r }
+plot_ly() %>%
+    add_trace(data = registro_actividad, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#344069'), name = "Actividad", visible = TRUE) %>%
+  add_trace(data = registro_peso, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#ab5032'), name = "Peso", visible = FALSE) %>%
+  add_trace(data = registro_sueño, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#376934'), name = "Sueño", visible = FALSE) %>%
+  add_trace(data = registro_cardiaco, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#c9b030'), name = "Cardiaco", visible = FALSE) %>%
+  layout(title = "Días de uso por semana", titlefont = list(family = "Arial Black", size = 18),
+         xaxis = list(title = "Días promedio por semana"),
+         yaxis = list(title = "Cantidad de usuarios"),
+         updatemenus = list(
+           list(
+             buttons = list(
+               list(method = "restyle",
+                    args = list("visible", list(TRUE, FALSE, FALSE, FALSE)),
+                    label = "Actividad"),
+               list(method = "restyle",
+                    args = list("visible", list(FALSE, TRUE, FALSE, FALSE)),
+                    label = "Peso"),
+               list(method = "restyle",
+                    args = list("visible", list(FALSE, FALSE, TRUE, FALSE)),
+                    label = "Sueño"),
+               list(method = "restyle",
+                    args = list("visible", list(FALSE, FALSE, FALSE, TRUE)),
+                    label = "Cardiaco")
+             ),
+             direction = "down",
+             showactive = TRUE
+           )
+         )
+  )
+```

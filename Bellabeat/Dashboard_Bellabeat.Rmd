@@ -1,0 +1,378 @@
+---
+title: "Datos de uso Fitbit"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    theme: spacelab
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(readr)
+library(janitor)
+library(dplyr)
+library(lubridate)
+library(gtsummary)
+library(scales)
+library(ggplot2)
+library(plotly)
+library(knitr)
+library(kableExtra)
+```
+
+```{r}
+# Se importan los datos y se guardan en una variable. Para una mayor portabilidad se añade una función de directorio inicial.
+directorio_inicial <- "D:/Marco Aurelio/Proyectos/GDA/"
+control_peso <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "weightLogInfo_merged.csv"))
+diario_actividad <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "dailyActivity_merged.csv"))
+diario_sueño <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "sleepDay_merged.csv"))
+frecuencia_cardiaca <- read_csv(file.path(directorio_inicial, "Bellabeat", "Fitbit Datos (03.12.2016 a 05.12.2016)", "Sucios", "heartrate_seconds_merged.csv"))
+
+# Se eliminan los datos duplicados del diario de sueño.
+diario_sueño_singulares <- diario_sueño[!duplicated(diario_sueño), ]
+diario_sueño <- diario_sueño_singulares
+
+# Se seleccionan la columnas a utilizar y se le da un formato limpio a sus encabezados.
+control_peso_uno <- control_peso %>%
+  select(Id,Fat,BMI) %>%
+  clean_names()
+
+control_peso_dos <- control_peso %>%
+  select(Id,IsManualReport) %>%
+  clean_names()
+
+diario_actividad_uno <- diario_actividad %>%
+  select(Id,VeryActiveMinutes,FairlyActiveMinutes,LightlyActiveMinutes,SedentaryMinutes) %>%
+  clean_names()
+
+diario_actividad_dos <- diario_actividad %>%
+  select(Id,ActivityDate,TotalSteps) %>%
+  clean_names()
+
+diario_actividad_tres <- diario_actividad %>%
+  select(Id,Calories) %>%
+  clean_names()
+
+diario_sueño_uno <- diario_sueño %>%
+  select(Id,TotalMinutesAsleep,TotalTimeInBed) %>%
+  clean_names()
+
+diario_sueño_dos <- diario_sueño %>%
+  select(Id,TotalSleepRecords) %>%
+  clean_names()
+
+fechas_peso <- control_peso %>% 
+  select(Id, Date) %>% 
+  clean_names()
+
+fechas_actividad <- diario_actividad %>% 
+  select(Id, ActivityDate) %>% 
+  clean_names()
+
+fechas_sueño <- diario_sueño %>% 
+  select(Id, SleepDay) %>% 
+  clean_names()
+
+fechas_frecuencia <-  frecuencia_cardiaca %>% 
+  select(Id, Time) %>% 
+  clean_names()
+
+#Se añade una columna para saber si los usuarios miden ambos parámetros o no.
+control_peso_uno <- control_peso_uno %>%
+  mutate(dos_mediciones = ifelse(!is.na(fat) & !is.na(bmi), "IMC y porcentaje graso", "Solo IMC"))
+
+control_peso_dos <- control_peso_dos %>%
+  mutate(entrada_datos = ifelse(is_manual_report == "TRUE", "Manual", "Automática"))
+
+diario_sueño_dos <- diario_sueño_dos %>%
+  mutate(sueño_continuo = ifelse(total_sleep_records == "1", "Continuo", "Interrumpido"))
+
+#Se agrupan los datos por id y se suman las otras columnas.
+diario_actividad_uno <- diario_actividad_uno %>%
+  group_by(id) %>%
+  summarise(minutos_muy_activos_suma = sum(very_active_minutes),
+            minutos_activos_suma = sum(fairly_active_minutes),
+            minutos_ligeramente_activos_suma = sum(lightly_active_minutes),
+            minutos_sedentarios_suma = sum(sedentary_minutes)
+            )
+
+diario_sueño_uno <- diario_sueño_uno %>%
+  group_by(id) %>%
+  summarise(tiempo_sueño_suma = sum(total_minutes_asleep), tiempo_cama_suma = sum(total_time_in_bed))
+
+# Se eliminan los valores de cero, ya que indican que no hubo registros.
+diario_actividad_tres <- diario_actividad_tres %>%
+  filter(calories != 0)
+
+#Se cambia el tipo de datos de la columna id a texto.
+diario_actividad_uno <- diario_actividad_uno %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+
+diario_actividad_dos <- diario_actividad_dos %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+
+diario_actividad_tres <- diario_actividad_tres %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+
+diario_sueño_uno <- diario_sueño_uno %>%
+  mutate(id_cliente = as.character(id)) %>%
+  select(-id)
+
+#Se cambia el tipo de datos de la columna activity_date a fecha.
+diario_actividad_dos <- diario_actividad_dos %>%
+  mutate(fecha = as.Date(activity_date, format = "%m/%d/%Y")) %>%
+  select(-activity_date)
+
+#Se limpian los datos de frecuencia cardíaca.
+
+frecuencia_cardiaca_uno <- frecuencia_cardiaca %>%
+  mutate(fecha = as.Date(Time, format = "%m/%d/%Y")) %>%
+  select(-Time)
+
+frecuencia_promedio <- frecuencia_cardiaca_uno %>%
+  group_by(Id, fecha) %>%
+  summarize(frecuencia_cardiaca_promedio = mean(Value))
+
+frecuencia_promedio <- frecuencia_promedio %>%
+  mutate(id_cliente = as.character(Id))
+
+#Se agrupan los registros por id de usuario, día y semana.
+registros_peso_semana <- fechas_peso %>%
+  mutate(fecha = as.Date(date, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+
+registros_actividad_semana <- fechas_actividad %>%
+  mutate(fecha = as.Date(activity_date, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+
+registros_sueño_semana <- fechas_sueño %>%
+  mutate(fecha = as.Date(sleep_day, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+
+registros_frecuencia_semana <- fechas_frecuencia %>%
+  mutate(fecha = as.Date(time, format = "%m/%d/%Y")) %>%
+  group_by(id, semana = isoweek(fecha), dia_semana = wday(fecha, label = TRUE)) %>%
+  distinct() %>%
+  group_by(id, semana) %>%
+  summarise(registros_semanales = n_distinct(fecha)) %>%
+  ungroup()
+
+# Se promedian los registros semanales por id.
+registros_peso <- aggregate(registros_semanales ~ id, data = registros_peso_semana, FUN = mean)
+registros_actividad <- aggregate(registros_semanales ~ id, data = registros_actividad_semana, FUN = mean)
+registros_sueño <- aggregate(registros_semanales ~ id, data = registros_sueño_semana, FUN = mean)
+registros_frecuencia <- aggregate(registros_semanales ~ id, data = registros_frecuencia_semana, FUN = mean)
+
+# Se crean intervalos de clase y se añade una columna clase para clasificarlas.
+cortes_peso <- c(1.0, 2.8, 4.5, 6.3)
+etiquetas_peso <- c("1.0 a 2.8", "2.8 a 4.5", "4.5 a 6.3")
+registros_peso$clase <- cut(registros_peso$registros_semanales,cortes_peso, labels = etiquetas_peso, right = FALSE)
+
+cortes_actividad <- c(4.0, 4.5, 4.9, 5.4, 5.9, 6.3, 6.8)
+etiquetas_actividad <- c("4.0 a 4.5", "4.5 a 4.9", "4.9 a 5.4", "5.4 a 5.9", "5.9 a 6.3", "6.3 a 6.8")
+registros_actividad$clase <- cut(registros_actividad$registros_semanales,cortes_actividad, labels = etiquetas_actividad, right = FALSE)
+
+cortes_sueño <- c(1.0, 2.1, 3.1, 4.2, 5.2, 6.3)
+etiquetas_sueño <- c("1.0 a 2.1", "2.1 a 3.1", "3.1 a 4.2", "4.2 a 5.2", "5.2 a 6.3")
+registros_sueño$clase <- cut(registros_sueño$registros_semanales,cortes_sueño, labels = etiquetas_sueño, right = FALSE)
+
+cortes_frecuencia <- c(1.0, 2.4, 3.8, 5.2, 6.6)
+etiquetas_frecuencia <- c("1.0 a 2.4", "2.4 a 3.8", "3.8 a 5.2", "5.2 a 6.6")
+registros_frecuencia$clase <- cut(registros_frecuencia$registros_semanales,cortes_frecuencia, labels = etiquetas_frecuencia, right = FALSE)
+
+# Se crea la tabla de frecuencias.
+registro_peso <- as.data.frame(table(registros_peso$clase))
+colnames(registro_peso) <- c("nivel", "frecuencia")
+
+registro_actividad <- as.data.frame(table(registros_actividad$clase))
+colnames(registro_actividad) <- c("nivel", "frecuencia")
+
+registro_sueño <- as.data.frame(table(registros_sueño$clase))
+colnames(registro_sueño) <- c("nivel", "frecuencia")
+
+registro_cardiaco <- as.data.frame(table(registros_frecuencia$clase))
+colnames(registro_cardiaco) <- c("nivel", "frecuencia")
+
+# Se resumen los datos para que sean utilizables en el gráfico de pastel.
+resumen_control_uno <- control_peso_uno %>%
+  tabyl(dos_mediciones)
+
+resumen_control_dos <- control_peso_dos %>%
+  tabyl(entrada_datos)
+
+resumen_sueño_dos <- diario_sueño_dos %>%
+  tabyl(sueño_continuo)
+```
+
+Hábitos {data-icon="fa-pie-chart"}
+======================================
+
+Row {.collapse}
+-----------------------------------------------------------------------
+
+```{r, fig.height = 3, fig.width = 3}
+ggplot(resumen_control_uno, aes(x = "", y = n, fill = dos_mediciones)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#4a8a76", "#2d3f7a")) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(round(percent*100, 2), "%")), color = "white", position = position_stack(vjust = 0.5)) +
+  labs(title = "Cantidad de registros de \n   IMC y porcentaje graso", x = " ", y = " ", fill = "Medición utilizada") +
+  theme_minimal()+
+  theme(plot.title = element_text(family = "Arial", size = 10, face = "bold"), text = element_text(family = "Arial", size = 10, color = "black"), legend.margin = margin(-5, 0, 3, 0), axis.text.x = element_blank(), legend.position = "bottom") +
+  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5))
+```
+
+```{r, fig.height = 3, fig.width = 4}
+plot_ly(frecuencia_promedio, x = ~fecha, y = ~id_cliente, z = ~frecuencia_cardiaca_promedio, type = "heatmap", colors = "viridis", colorbar = list(title = "Pulsaciones \npromedio", X = 120, len = 0.7)) %>% 
+  layout(title = "Registros diarios de frecuencia cardíaca promedio", titlefont = list(family = "Arial Black", size = 12.5), xaxis = list(title = "Fecha"), xaxis = list(title = "Fecha"), yaxis = list(title = "ID"))
+```
+
+```{r, fig.height = 3, fig.width = 3}
+plot_ly(diario_sueño_uno, x = ~diario_sueño_uno$id_cliente, y = ~diario_sueño_uno$tiempo_sueño_suma, type = 'bar', name = 'Tiempo \nde sueño', marker = list(color = "#d1a624")) %>%
+  add_trace(y = ~diario_sueño_uno$tiempo_cama_suma, name = 'Tiempo \nen cama', marker = list(color = "#384982")) %>%
+  layout(title = "Total de minutos dormidos y en cama", titlefont = list(family = "Arial Black", size = 12.5), xaxis = list(autotypenumbers = 'strict', title = "ID", tickangle = 60, tickformat = ".0f"), yaxis = list(title = "Tiempo (min)", tickformat = ".0f"), barmode = 'group')
+```
+
+```{r, fig.height = 3, fig.width = 4}
+
+plot_ly(labels = ~resumen_sueño_dos$sueño_continuo,
+        values = ~resumen_sueño_dos$percent, type = 'pie',
+        marker = list(colors = c("#2d3f7a", "#4a8a76"))
+        ) %>%
+  layout(title = "Registros de sueño", titlefont = list(family = "Arial Black", size = 12.5), scene = list(aspectmode = "data"))
+```
+
+Row {.collapse}
+-----------------------------------------------------------------------
+
+```{r, fig.height = 3, fig.width = 4}
+plot_ly(diario_actividad_uno, x = ~diario_actividad_uno$id_cliente, y = ~diario_actividad_uno$minutos_muy_activos_suma, type = 'bar', name = 'Muy activa', marker = list(color = 'green')) %>%
+  add_trace(y = ~diario_actividad_uno$minutos_activos_suma, name = 'Activa', marker = list(color = 'yellow')) %>%
+  add_trace(y = ~diario_actividad_uno$minutos_ligeramente_activos_suma, name = 'Ligeramente \nactiva', marker = list(color = 'orange')) %>%
+  add_trace(y = ~diario_actividad_uno$minutos_sedentarios_suma, name = 'Sedentaria', marker = list(color = 'red')) %>%
+  layout(title = "Tiempo de actividad física", titlefont = list(family = "Arial Black", size = 12.5), barmode = 'stack', xaxis = list(title = 'ID'), yaxis = list(title = 'Tiempo (min)', tickformat = ".0f"))
+```
+
+```{r, fig.height = 3, fig.width = 5}
+ggplot(diario_actividad_dos, aes(x = fecha, y = id_cliente, fill = total_steps)) +
+  geom_tile() +
+  scale_fill_gradientn(colors = c("#c72c31", "#e3cb2d", "#2c8f30", "#1d702c", "#1b633e", "#13543a", "#081933"), values = rescale(c(0, 30000))) +
+  theme_minimal() +
+  labs(title = "Cantidad de pasos dados por día", x = "Fecha", y = "ID", fill = "Cantidad de pasos") +
+  scale_x_date(date_breaks = "1 week", date_labels = "%d-%m") +
+   theme(plot.title = element_text(family = "Arial", size = 10, face = "bold"))
+```
+
+```{r, fig.height = 3, fig.width = 5}
+plot_ly(diario_actividad_tres, x = ~diario_actividad_tres$id_cliente, y = ~diario_actividad_tres$calories, type = 'box', color = ~diario_actividad_tres$id_cliente) %>%
+  layout(title = "Diagrama de caja y bigote de gasto calórico por ID", titlefont = list(family = "Arial Black", size = 12.5), xaxis = list(title = "ID", tickangle = -90), yaxis = list(title = "Gasto calórico (kcal)"))
+```
+
+
+Registros {data-icon="fa-bar-chart"}
+======================================
+
+Row {.flex, .collapse}
+-----------------------------------------------------------------------
+
+```{r, fig.height = 6.2, fig.width = 6}
+plot_ly(labels = ~resumen_control_dos$entrada_datos,
+        values = ~resumen_control_dos$percent, type = 'pie',
+        marker = list(colors = c("#d1a624", "#2d3f7a")) 
+        )%>%
+  layout(title = "Modo de registro de datos de control de peso", titlefont = list(family = "Arial Black", size = 18), scene = list(aspectmode = "data"))
+```
+
+```{r, fig.height = 6.2, fig.width = 8}
+plot_ly() %>%
+    add_trace(data = registro_actividad, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#344069'), name = "Actividad", visible = TRUE) %>%
+  add_trace(data = registro_peso, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#ab5032'), name = "Peso", visible = FALSE) %>%
+  add_trace(data = registro_sueño, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#376934'), name = "Sueño", visible = FALSE) %>%
+  add_trace(data = registro_cardiaco, x = ~nivel, y = ~frecuencia, type = 'bar', marker = list(color = '#c9b030'), name = "Cardiaco", visible = FALSE) %>%
+  layout(title = "Días de uso por semana", titlefont = list(family = "Arial Black", size = 18),
+         xaxis = list(title = "Días promedio por semana"),
+         yaxis = list(title = "Cantidad de usuarios"),
+         updatemenus = list(
+           list(
+             buttons = list(
+               list(method = "restyle",
+                    args = list("visible", list(TRUE, FALSE, FALSE, FALSE)),
+                    label = "Actividad"),
+               list(method = "restyle",
+                    args = list("visible", list(FALSE, TRUE, FALSE, FALSE)),
+                    label = "Peso"),
+               list(method = "restyle",
+                    args = list("visible", list(FALSE, FALSE, TRUE, FALSE)),
+                    label = "Sueño"),
+               list(method = "restyle",
+                    args = list("visible", list(FALSE, FALSE, FALSE, TRUE)),
+                    label = "Cardiaco")
+             ),
+             direction = "down",
+             showactive = TRUE
+           )
+         )
+  )
+```
+
+
+Uso semanal {data-icon="fa-table"}
+======================================
+
+Row {.flex, .collapse}
+-----------------------------------------------------------------------
+```{r}
+registros_peso[, 1:2] %>%
+  setNames(c("ID de usuario", "Días promedio por semana")) %>%
+  kable(align = "c", caption = "<span style='font-size: 18px; color: black; display: block; text-align: center;'><b>Registros de peso</b></span>", format = "html") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "bordered", "hover", "condensed", "responsive"))%>%
+  row_spec(row = 0, background = "#ab5032", color = "#ffffff", italic = TRUE) %>% 
+  row_spec(row = seq(1, nrow(registros_peso[, 1:2]), by = 2), background = "#faab7a", color = "#000000") %>%
+  row_spec(row = seq(2, nrow(registros_peso[, 1:2]), by = 2), background = "#ffd0b3", color = "#000000")
+```
+
+```{r}
+registros_actividad[, 1:2] %>%
+  setNames(c("ID de usuario", "Días promedio por semana")) %>%
+  kable(align = "c", caption = "<span style='font-size: 18px; color: black; display: block; text-align: center;'><b>Registros de actividad fisica</b></span>", format = "html") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "bordered", "hover", "condensed", "responsive"))%>%
+  row_spec(row = 0, background = "#344069", color = "#ffffff", italic = TRUE) %>% 
+  row_spec(row = seq(1, nrow(registros_actividad[, 1:2]), by = 2), background = "#90a0d1", color = "#000000") %>%
+  row_spec(row = seq(2, nrow(registros_actividad[, 1:2]), by = 2), background = "#b4bede", color = "#000000")
+```
+
+```{r}
+registros_sueño[, 1:2] %>%
+  setNames(c("ID de usuario", "Días promedio por semana")) %>%
+  kable(align = "c", caption = "<span style='font-size: 18px; color: black; display: block; text-align: center;'><b>Registros de sueño</b></span>", format = "html") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "bordered", "hover", "condensed", "responsive"))%>%
+  row_spec(row = 0, background = "#376934", color = "#ffffff", italic = TRUE) %>% 
+  row_spec(row = seq(1, nrow(registros_sueño[, 1:2]), by = 2), background = "#78a175", color = "#000000") %>%
+  row_spec(row = seq(2, nrow(registros_sueño[, 1:2]), by = 2), background = "#a5bfa3", color = "#000000")
+```
+
+```{r}
+registros_frecuencia[, 1:2] %>%
+  setNames(c("ID de usuario", "Días promedio por semana")) %>%
+  kable(align = "c", caption = "<span style='font-size: 18px; color: black; display: block; text-align: center;'><b>Registros de frecuencía cardíaca</b></span>", format = "html") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "bordered", "hover", "condensed", "responsive"))%>%
+  row_spec(row = 0, background = "#c9b030", color = "#ffffff", italic = TRUE) %>% 
+  row_spec(row = seq(1, nrow(registros_frecuencia[, 1:2]), by = 2), background = "#edd96f", color = "#000000") %>%
+  row_spec(row = seq(2, nrow(registros_frecuencia[, 1:2]), by = 2), background = "#f2e499", color = "#000000")
+```
